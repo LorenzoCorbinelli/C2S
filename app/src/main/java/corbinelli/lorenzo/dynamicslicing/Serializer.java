@@ -27,12 +27,16 @@ public class Serializer {
      * @param args The StringBuilder in which are saved the method's arguments names to log
      */
     public void extractArgumentValues(Object arg, StringBuilder args) {
-        JsonElement jsonElement = gson.toJsonTree(arg);
-        if (jsonElement.isJsonObject() || jsonElement.isJsonArray()) {
-            String varName = getVarNameAndLogSerialization(arg.getClass(), jsonElement);
+        try {
+            JsonElement jsonElement = gson.toJsonTree(arg);
+            String varName = getVarNameAndLogSerialization(arg, jsonElement);
             args.append(varName).append(", ");
-        } else {    // it's a raw element
-            args.append(jsonElement).append(", ");
+        } catch (Exception e) {
+            if(variableName.isTheObjectAlreadyCreated(arg)) {
+                args.append(variableName.getVariableName(arg)).append(", ");
+            } else {
+                args.append(arg.getClass().getSimpleName()).append("_notSerializable").append(", ");
+            }
         }
     }
 
@@ -42,8 +46,16 @@ public class Serializer {
      * @return The variable name corresponding to the object created
      */
     public String logObjectSerialization(Object obj) {
-        JsonElement jsonElement = gson.toJsonTree(obj);
-        return getVarNameAndLogSerialization(obj.getClass(), jsonElement);
+        try {
+            JsonElement jsonElement = gson.toJsonTree(obj);
+            return getVarNameAndLogSerialization(obj, jsonElement);
+        } catch(Exception e) {
+            if(variableName.isTheObjectAlreadyCreated(obj)) {
+                return variableName.getVariableName(obj);
+            } else {
+                return obj.getClass().getSimpleName() + "_notSerializable";
+            }
+        }
     }
 
     /**
@@ -51,16 +63,25 @@ public class Serializer {
      * @param obj The object to serialize
      * @return The string representation of the object
      */
-    public String serializeObject(Object obj) {
-        return gson.toJson(obj);
+    public String serializeObjectAndEscapeJson(Object obj) {
+        try {
+            return escapeJson(gson.toJson(obj));
+        } catch (Exception e) {
+            return "OBJECT NOT SERIALIZABLE";
+        }
     }
 
-    private String getVarNameAndLogSerialization(Class<?> type, JsonElement jsonElement) {
+    private String getVarNameAndLogSerialization(Object obj, JsonElement jsonElement) {
         if (!flag) {
             Log.i(logTag, "Gson gson = new Gson();");
             flag = true;
         }
-        String varName = variableName.getVariableName();
+        // if the object is already present I don't need to log the creation again
+        if(variableName.isTheObjectAlreadyCreated(obj)) {
+            return variableName.getVariableName(obj);
+        }
+        String varName = variableName.getVariableName(obj);
+        Class<?> type = obj.getClass();
         Log.i(logTag, type.getCanonicalName()
                 + " "
                 + varName

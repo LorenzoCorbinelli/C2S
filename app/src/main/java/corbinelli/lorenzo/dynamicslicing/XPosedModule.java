@@ -26,20 +26,30 @@ public class XPosedModule implements IXposedHookLoadPackage {
     private void addCallback(Object[] parametersAndHook) {
         parametersAndHook[parametersAndHook.length - 1] = new XC_MethodHook() {
             @Override
-            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                 Member hockedMember = param.method;
                 String beforeMemberName = "";
+                String assertStatement = "";
                 if (hockedMember instanceof Constructor) {
                     beforeMemberName = hockedMember.getDeclaringClass().getCanonicalName()
-                            + " " + variableName.getVariableName() + " = new ";
+                            + " " + variableName.getVariableName(param.thisObject) + " = new ";
                 } else {    // it's a method
+                    String returnVariableName = variableName.getReturnVariableName(param.getResult());
                     Method method = (Method)hockedMember;
+                    boolean isVoid = method.getReturnType().equals(void.class);
+                    if(!isVoid) {
+                        beforeMemberName = method.getReturnType().getCanonicalName() + " " + returnVariableName + " = ";
+                        // if it is not void manage also the returned value
+                        assertStatement = "assert Objects.equals(" + returnVariableName + ", gson.fromJson(\""
+                                + serializer.serializeObjectAndEscapeJson(param.getResult())
+                                + "\", " + method.getReturnType().getCanonicalName() + ".class));";
+                    }
                     if (Modifier.isStatic(method.getModifiers())) {
                         // take the class name
-                        beforeMemberName = method.getDeclaringClass().getCanonicalName();
+                        beforeMemberName += method.getDeclaringClass().getCanonicalName();
                     } else {
                         // serialize the "this" reference
-                        beforeMemberName = serializer.logObjectSerialization(param.thisObject);
+                        beforeMemberName += serializer.logObjectSerialization(param.thisObject);
                     }
                     beforeMemberName += ".";
                 }
@@ -55,15 +65,10 @@ public class XPosedModule implements IXposedHookLoadPackage {
                     args.setLength(args.length() - 2);
                 }
 
-                Log.i(LOG_TAG, beforeMemberName + memberName + "(" + args + ");");
-            }
-
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                // only if the hooked member is a method
-                if (param.method instanceof Method) {
-                    Log.i(LOG_TAG, "// Result: " + serializer.serializeObject(param.getResult()));
-                }
+                String statement = beforeMemberName + memberName + "(" + args + ");";
+                Log.i(LOG_TAG, statement);
+                if(!assertStatement.isEmpty())
+                    Log.i(LOG_TAG, assertStatement);
             }
         };
     }
